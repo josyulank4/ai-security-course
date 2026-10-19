@@ -97,6 +97,96 @@ def main() -> None:
           scan_text("Please summarize ticket 4821 for the agent.") == [])
 
     print()
+    print("== module demos: Sections 1, 3-12 ==")
+    expect_module("casestudies (Section 1)", "casestudies.case_files",
+                  ["case files reviewed: 6", "exotic exploits required: 0",
+                   "case files demo complete"])
+    expect_module("injectiondefense (Section 3)",
+                  "injectiondefense.defense_stack",
+                  ["attack success WITHOUT defenses: 6/6",
+                   "attack success WITH the defense stack: 0/6",
+                   "benign payloads mis-flagged by screening: 0/2",
+                   "defense stack demo complete"])
+    expect_module("redaction (Section 4)", "redaction.redact",
+                  ["detections: 5 items across 5 kinds",
+                   "order number left untouched (fails Luhn): True",
+                   "redaction demo complete"])
+    expect_module("supplychain (Section 5)", "supplychain.verify_estate",
+                  ["clean estate admission: 4/4 admitted",
+                   "supply chain demo complete"])
+    expect_module("agentguard (Section 6)", "agentguard.sandbox",
+                  ["verdicts: ALLOW=1 GATE=2 DENY=2",
+                   "audit records written: 5",
+                   "clean tool result admitted: True",
+                   "poisoned tool result admitted: False",
+                   "sandbox demo complete"])
+    expect_module("ragsecurity (Section 7)", "ragsecurity.corpus",
+                  ["corpus check: 2 admitted, 2 quarantined",
+                   "QUARANTINED D-999: no provenance record (unsigned)",
+                   "rag security demo complete"])
+    expect_module("guardrails (Section 8)", "guardrails.policy_engine",
+                  ["classifier on the adversarial suite: TP=3 FP=0 FN=0",
+                   "guardrails demo complete"])
+    expect_module("redteam (Section 9)", "redteam.harness",
+                  ["overall ASR: bare 6/6 = 100% -> defended 0/6 = 0%",
+                   "red team demo complete"])
+    expect_module("telemetry (Section 10)", "telemetry.detect",
+                  ["PII present in stored log: False",
+                   "alerts raised: 2",
+                   "telemetry demo complete"])
+    expect_module("governance (Section 11)", "governance.evidence",
+                  ["control mappings: 6 controls mapped",
+                   "evidence artifacts indexed: 6",
+                   "governance demo complete"])
+    expect_module("gateway (Section 12)", "gateway.gateway",
+                  ["gateway: 2/4 calls routed",
+                   "capstone readiness verdict: NO-GO",
+                   "verdict once the blocker is fixed: GO",
+                   "gateway demo complete"])
+
+    print()
+    print("== direct assertions (Sections 1, 3-12) ==")
+    from redaction.redact import Vault, luhn_ok, redact
+    check("Luhn accepts the test card", luhn_ok("4242 4242 4242 4242"))
+    check("Luhn rejects the order number",
+          not luhn_ok("1234 5678 9012 3456"))
+    v = Vault()
+    cleaned, counts = redact("mail me at a@b.co or don't", v)
+    check("redact is deterministic per value",
+          v.token_for("EMAIL", "a@b.co") in cleaned and counts["EMAIL"] == 1)
+
+    from supplychain.verify_estate import APPROVED, admit, build_registry
+    reg = build_registry(APPROVED)
+    check("every approved artifact is admitted",
+          all(admit(a, reg)[0] for a in APPROVED))
+    from supplychain.verify_estate import Artifact
+    check("a tampered artifact is refused",
+          not admit(Artifact("support-model-2.1", "weights", b"x"), reg)[0])
+
+    from guardrails.policy_engine import POLICY
+    check("policy gates refunds", POLICY.decide("support",
+          "tool:issue_refund")[0] == "GATE")
+    check("policy default-denies the unknown",
+          POLICY.decide("nobody", "tool:whatever")[0] == "DENY")
+
+    from redteam.harness import run_suite
+    bare, defended = run_suite(False), run_suite(True)
+    check("red team: bare target fully breached",
+          all(s == t for s, t in bare.values()))
+    check("red team: defended target holds",
+          all(s == 0 for s, _ in defended.values()))
+
+    from gateway.gateway import CHECKLIST, readiness_review
+    full = {i.name: True for i in CHECKLIST}
+    check("a complete pack is a GO", readiness_review(full)[0] == "GO")
+    broken = dict(full)
+    broken["Estate pinned; admission control on"] = False
+    verdict, blockers, _ = readiness_review(broken)
+    check("a missing critical item is a NO-GO with the blocker named",
+          verdict == "NO-GO"
+          and blockers == ["Estate pinned; admission control on"])
+
+    print()
     if FAILURES:
         print(f"VALIDATION FAILED: {len(FAILURES)} check(s)")
         for failure in FAILURES:
